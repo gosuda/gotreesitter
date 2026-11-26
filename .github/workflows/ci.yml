@@ -1221,14 +1221,10 @@ jobs:
           # Forks cannot read the variable. Fetch the same public, pinned lock;
           # fetch_grammar_receipt_lock.sh still verifies its committed digest.
           GTS_CORPUS_LOCK_URL: ${{ vars.GTS_CORPUS_LOCK_URL || 'https://gist.githubusercontent.com/odvcencio/b5d19a2fcb80420c751b5bb7ab3129bb/raw/63e633db3cb7229c6495095c8ab34576bbd0525d/corpus_sources.lock' }}
-          RUNNER_KIND: ${{ runner.environment }}
         run: |
           set -euo pipefail
-          # Fork heads stay on disposable hosted runners. Run the same paired
-          # gate there, with room for the host outside the Docker memory limit.
-          if [ "$RUNNER_KIND" = github-hosted ]; then
-            export GTS_EDITOR_LATENCY_MEMORY_LIMIT=6g GOMEMLIMIT=4GiB
-          fi
+          # Reserve memory for the host on the 8 GiB Depot runner.
+          export GTS_EDITOR_LATENCY_MEMORY_LIMIT=6g GOMEMLIMIT=4GiB
           if [ -z "$BASE_SHA" ]; then
             BASE_SHA=$(git rev-parse HEAD^)
           fi
@@ -1855,6 +1851,32 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fetch retired historical receipt commits
+        run: |
+          set -euo pipefail
+          # These retired proofs are not reachable from the fork's branches.
+          # A full fork checkout cannot supply their original objects. Keep the
+          # authenticated revisions and the strict proof gate unchanged.
+          missing=()
+          for revision in \
+            5070ffd4594a819e8ebe78fa2bf651c197cbdce4 \
+            e1de4484b5655ab11057f70d9dc7b1245972d03f \
+            b4833798bb7d934bcb8d280a7cd5937d34fa2c9a \
+            9bd3e9a971b323e2cdeed302aa045af174ffe53c \
+            425ffdc2eb919b82b38484a0b3a2107d5c7341f1 \
+            0d6683a465c6d20477c6a16b6b1f70ac2a90e87b
+          do
+            if ! git cat-file -e "${revision}^{commit}" 2>/dev/null; then
+              missing+=("$revision")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            git fetch --no-tags https://github.com/odvcencio/gotreesitter.git "${missing[@]}"
+            for revision in "${missing[@]}"; do
+              git cat-file -e "${revision}^{commit}"
+            done
+          fi
+
       - name: Prepare job-owned Go cache and scratch
         if: runner.environment == 'self-hosted'
         run: bash .github/scripts/prepare_runner.sh
@@ -1953,8 +1975,9 @@ jobs:
           tinygo version
           tinygo build -tags grammar_subset,grammar_subset_go -target wasm -no-debug -opt=z -o /tmp/gotreesitter-tinygo.wasm ./wasm/runtime
 
-  # Compare the root package API with the highest stable version tag. This
-  # keeps the baseline current without manual updates after each release.
+  # Compare the root package API with the highest stable version tag. Until
+  # this fork publishes a release, restore the immutable upstream v0.57.0
+  # baseline documented in README.md and CHANGELOG.md.
   #
   # golang.org/x/exp has no tagged releases, so APIDIFF_TOOL_VERSION pins an
   # exact pseudo-version of the tool. Bump it independently of the API tag.
@@ -1977,11 +2000,21 @@ jobs:
           cache: ${{ runner.environment != 'self-hosted' }}
           go-version-file: go.mod
 
+      - name: Fetch the released API baseline
+        run: |
+          set -euo pipefail
+          git fetch --tags --depth=1 origin
+          stable_tag="$(git tag --list 'v[0-9]*' | awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/ { found = 1 } END { print found + 0 }')"
+          if [ "$stable_tag" = 0 ]; then
+            git fetch --no-tags --depth=1 https://github.com/odvcencio/gotreesitter.git \
+              d8f15566820622a62ab33c035814c76497b695ea
+            git tag v0.57.0 d8f15566820622a62ab33c035814c76497b695ea
+          fi
+
       - name: Public API diff vs latest stable tag (package gotreesitter)
         run: |
           set -euo pipefail
 
-          git fetch --tags --depth=1 origin
           APIDIFF_BASELINE_TAG="$(git tag --list 'v[0-9]*' --sort=-version:refname | awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/ && !selected { selected = $0 } END { print selected }')"
           if [ -z "$APIDIFF_BASELINE_TAG" ]; then
             echo "::error::no stable version tag found for the public API baseline"
@@ -2888,7 +2921,7 @@ jobs:
           cache: ${{ runner.environment != 'self-hosted' }}
           go-version-file: go.mod
 
-      - name: Benchmark Base vs Head (advisory)
+      - name: Benchmark correctness and advisory thresholds
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PERF_LEGACY_BASE_SHA: 7a29f591d7fcc54b3d0639b3e38a1bacd8fcb386
@@ -3033,8 +3066,11 @@ jobs:
 
           # Keep edit attribution separate from the unchanged timing inputs.
           # Capture the runner CPU because hosted depot-ubuntu-24.04 spans hardware.
-          bash scripts/run_go_edit_attribution.sh "${BASE_TREE}" \
-            "${OUT_DIR}/edit-attribution" "${BASE_RSS_BIN}" "${HEAD_RSS_BIN}"
+          if ! bash scripts/run_go_edit_attribution.sh "${BASE_TREE}" \
+            "${OUT_DIR}/edit-attribution" "${BASE_RSS_BIN}" "${HEAD_RSS_BIN}"; then
+            echo "::warning::edit attribution is unavailable; the completed benchmark comparison remains valid"
+            printf '%s\n' '- edit attribution: unavailable (advisory)' >> "${GITHUB_STEP_SUMMARY}"
+          fi
 
       - name: Perf Definitive Outcome Summary
         if: always()

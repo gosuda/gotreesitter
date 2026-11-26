@@ -12,12 +12,12 @@ import (
 
 // Run the workflow's actual shell with campaign commands replaced by recorders.
 // A fork must run the paired gate on its head, rather than fail or skip it.
-func TestEditorLatencyHostedForkRunsPairedGate(t *testing.T) {
+func TestEditorLatencyDepotForkRunsPairedGate(t *testing.T) {
 	wf := readGateWorkflow(t)
 	job := wf.Jobs["editor_latency"]
-	wantRoute := "${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.GTS_RUNNER_LABELS != '' && fromJSON(vars.GTS_RUNNER_LABELS) || 'ubuntu-latest' }}"
+	wantRoute := "depot-ubuntu-24.04"
 	if job.RunsOn != wantRoute {
-		t.Fatalf("forks must retain the hosted runner trust boundary: %s", job.RunsOn)
+		t.Fatalf("forks must run on the explicit disposable Depot runner: %s", job.RunsOn)
 	}
 	var script string
 	checkoutHead, pythonSuite := false, false
@@ -29,8 +29,8 @@ func TestEditorLatencyHostedForkRunsPairedGate(t *testing.T) {
 			pythonSuite = true
 		}
 		if strings.Contains(step.Run, "bash scripts/run_editor_latency_gate.sh") {
-			if step.Env["RUNNER_KIND"] != "${{ runner.environment }}" || step.Env["BASE_SHA"] != "${{ github.event.pull_request.base.sha }}" {
-				t.Fatal("campaign must bind the actual runner environment and PR base")
+			if step.Env["BASE_SHA"] != "${{ github.event.pull_request.base.sha }}" {
+				t.Fatal("campaign must bind the PR base")
 			}
 			script = step.Run
 		}
@@ -66,10 +66,7 @@ func TestEditorLatencyHostedForkRunsPairedGate(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				memory := "memory=8g gomemlimit=6GiB"
-				if runner == "github-hosted" {
-					memory = "memory=6g gomemlimit=4GiB"
-				}
+				memory := "memory=6g gomemlimit=4GiB"
 				want := "git fetch --no-tags origin base-sha\ncampaign scripts/run_editor_latency_gate.sh --base base-sha --output " + dir + "/w5-editor-latency --languages " + lang + " " + memory + "\n"
 				if string(data) != want {
 					t.Fatalf("paired gate invocation = %q, want %q", data, want)

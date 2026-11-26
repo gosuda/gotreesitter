@@ -37,6 +37,7 @@ concurrency:
 
 env:
   GOCACHEPROG: ""
+  GOENV: "off"
   ARBITER_VERSION: "1.9.0"
   ARBITER_LINUX_AMD64_SHA256: c6c5c6c069d33cc39b689201f30d4561472d6ed59731e3ba395b44079e53af38
 
@@ -72,6 +73,13 @@ jobs:
         with:
           cache: false
           go-version-file: go.mod
+
+      - name: Verify release Go cache isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache_program=$(go env GOCACHEPROG)
+          test -z "$cache_program"
 
       - name: Install the pinned Arbiter CLI
         shell: bash
@@ -282,6 +290,13 @@ jobs:
         with:
           cache: false
           go-version-file: go.mod
+
+      - name: Verify release Go cache isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache_program=$(go env GOCACHEPROG)
+          test -z "$cache_program"
 
       - name: Install the pinned Arbiter CLI
         shell: bash
