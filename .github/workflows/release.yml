@@ -41,7 +41,7 @@ env:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     permissions:
       actions: read
       contents: read
@@ -249,7 +249,7 @@ jobs:
 
   publish:
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     environment: release
     permissions:
       actions: read

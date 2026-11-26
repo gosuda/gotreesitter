@@ -49,7 +49,7 @@ env:
 
 jobs:
   discover:
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.GTS_ISOLATED_RUNNER_LABELS != '' && fromJSON(vars.GTS_ISOLATED_RUNNER_LABELS) || 'ubuntu-latest' }}
+    runs-on: depot-ubuntu-24.04-4
     timeout-minutes: 10
     outputs:
       targets: ${{ steps.list.outputs.targets }}
@@ -78,7 +78,7 @@ jobs:
 
   fuzz:
     needs: discover
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.GTS_ISOLATED_RUNNER_LABELS != '' && fromJSON(vars.GTS_ISOLATED_RUNNER_LABELS) || 'ubuntu-latest' }}
+    runs-on: depot-ubuntu-24.04-4
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -151,7 +151,7 @@ jobs:
   report:
     needs: [discover, fuzz]
     if: always() && needs.discover.result == 'success' && (github.event_name == 'schedule' || github.event.inputs.report == 'true')
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.GTS_ISOLATED_RUNNER_LABELS != '' && fromJSON(vars.GTS_ISOLATED_RUNNER_LABELS) || 'ubuntu-latest' }}
+    runs-on: depot-ubuntu-24.04-4
     timeout-minutes: 10
     permissions:
       contents: read
@@ -166,7 +166,7 @@ jobs:
         if: runner.environment == 'self-hosted'
         run: bash .github/scripts/prepare_runner.sh
 
-      # Needs python3 and gh on the runner (both ship on ubuntu-latest).
+      # Needs python3 and gh on the runner (both ship on depot-ubuntu-24.04).
       - name: Download fuzz results
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:

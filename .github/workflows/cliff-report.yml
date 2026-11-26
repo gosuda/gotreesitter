@@ -1,19 +1,9 @@
 name: cliff-report
 
 on:
-  pull_request:
-    paths-ignore:
-      - '*.md'
-      - 'LICENSE'
-      - 'docs/**'
-      - '.github/*.md'
-  # A nightly run measures main, so each engine pull request has a "before"
-  # column from main. A scheduled run checks out the default branch head. A
-  # pull request run measures the PR merged into its base: never quote it as
-  # main. 01:53 UTC avoids the top of the hour and the other nightly runs
-  # (ci 03:17, fuzz-nightly 04:41, cross-platform-smoke 05:23).
+  # Weekly reports measure the default branch; manual runs measure the selected ref.
   schedule:
-    - cron: '53 1 * * *'
+    - cron: '53 1 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -30,7 +20,7 @@ env:
 jobs:
   cliff-detector:
     # Workstream R7 reports failures. Graduation makes this gate blocking.
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.GTS_ISOLATED_RUNNER_LABELS != '' && fromJSON(vars.GTS_ISOLATED_RUNNER_LABELS) || 'ubuntu-latest' }}
+    runs-on: depot-ubuntu-24.04-4
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -57,7 +47,7 @@ jobs:
 
       # A cliff-rule failure stays report-only, so the measure step cannot turn
       # the run red. A missing report is different: the run did not measure what
-      # it should have. A nightly fails on it, so a partial nightly cannot pass
+      # it should have. A weekly fails on it, so a partial weekly cannot pass
       # for a good one. A pull request run or a manual run only warns.
       - name: Check that every expected report exists
         if: always()
@@ -100,12 +90,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          # The name carries the trigger and the measured commit, so a nightly
+          # The name carries the trigger and the measured commit, so a weekly
           # report on main cannot pass for a pull request report, or the
           # reverse. A manual run also says whether it measured the default
           # branch. It repeats the test from the measure step, because a step
           # env value is not visible here. For a pull request the commit is the
           # merge commit.
-          name: cliff-report-${{ github.event_name == 'schedule' && 'nightly' || github.event_name == 'pull_request' && 'pr' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && 'manual-main' || 'manual-branch' }}-${{ github.sha }}-${{ github.run_attempt }}
+          name: cliff-report-${{ github.event_name == 'schedule' && 'weekly' || github.event_name == 'pull_request' && 'pr' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && 'manual-main' || 'manual-branch' }}-${{ github.sha }}-${{ github.run_attempt }}
           path: harness_out/cliffs/*.json
           if-no-files-found: warn
