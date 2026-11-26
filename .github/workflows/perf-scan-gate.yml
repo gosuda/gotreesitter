@@ -2,6 +2,11 @@ name: perf-scan-hard-gate
 
 on:
   workflow_dispatch:
+    inputs:
+      corpus_lock_url:
+        description: HTTPS corpus lock URL; defaults to GTS_CORPUS_LOCK_URL
+        type: string
+        required: false
 
 concurrency:
   group: perf-scan-hard-gate
@@ -12,10 +17,9 @@ permissions:
 
 jobs:
   fleet:
-    runs-on: [self-hosted, perf]
+    runs-on: depot-ubuntu-24.04-4
     timeout-minutes: 360
     env:
-      PERF_CORPUS_DIR: /srv/gotreesitter-perf
       PERF_OUT: cgo_harness/perf_scan/out/hard_gate
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -23,6 +27,27 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: cgo_harness/go.mod
+
+      - name: Set the corpus directory
+        run: printf 'PERF_CORPUS_DIR=%s\n' "$RUNNER_TEMP/gotreesitter-perf" >> "$GITHUB_ENV"
+
+      - name: Provision the authenticated corpus on the Depot VM
+        shell: bash
+        env:
+          CORPUS_LOCK_URL: ${{ inputs.corpus_lock_url || vars.GTS_CORPUS_LOCK_URL }}
+        run: |
+          set -euo pipefail
+          bash scripts/fetch_grammar_receipt_lock.sh "$CORPUS_LOCK_URL" "$PERF_CORPUS_DIR/corpus_sources.lock"
+          while read -r name repo commit _ || [[ -n "${name:-}" ]]; do
+            [[ -z "${name:-}" || "$name" == \#* ]] && continue
+            [[ "$name" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "Invalid corpus name" >&2; exit 1; }
+            checkout="$PERF_CORPUS_DIR/corpus_sources/$name"
+            mkdir -p "$checkout"
+            git -C "$checkout" init -q
+            git -C "$checkout" remote add origin "$repo"
+            git -C "$checkout" fetch --quiet --depth 1 origin "$commit"
+            git -C "$checkout" checkout --quiet --detach FETCH_HEAD
+          done < "$PERF_CORPUS_DIR/corpus_sources.lock"
 
       - name: Authenticate corpus lock
         shell: bash
