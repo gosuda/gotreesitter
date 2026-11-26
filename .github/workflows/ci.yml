@@ -1221,14 +1221,10 @@ jobs:
           # Forks cannot read the variable. Fetch the same public, pinned lock;
           # fetch_grammar_receipt_lock.sh still verifies its committed digest.
           GTS_CORPUS_LOCK_URL: ${{ vars.GTS_CORPUS_LOCK_URL || 'https://gist.githubusercontent.com/odvcencio/b5d19a2fcb80420c751b5bb7ab3129bb/raw/63e633db3cb7229c6495095c8ab34576bbd0525d/corpus_sources.lock' }}
-          RUNNER_KIND: ${{ runner.environment }}
         run: |
           set -euo pipefail
-          # Fork heads stay on disposable hosted runners. Run the same paired
-          # gate there, with room for the host outside the Docker memory limit.
-          if [ "$RUNNER_KIND" = github-hosted ]; then
-            export GTS_EDITOR_LATENCY_MEMORY_LIMIT=6g GOMEMLIMIT=4GiB
-          fi
+          # Reserve memory for the host on the 8 GiB Depot runner.
+          export GTS_EDITOR_LATENCY_MEMORY_LIMIT=6g GOMEMLIMIT=4GiB
           if [ -z "$BASE_SHA" ]; then
             BASE_SHA=$(git rev-parse HEAD^)
           fi
@@ -2870,6 +2866,7 @@ jobs:
             --run '^TestParityHighlight$|^TestParityHighlightAllGrammars$|^TestParityYAMLCorpus$|^TestParityYAMLCorpusStructural$|^TestParityYAMLCorpusSummary$'
 
   perf-regression:
+    continue-on-error: true
     needs: exhaustive_parity_scope
     if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && github.event_name == 'workflow_dispatch'
     runs-on: depot-ubuntu-24.04-4

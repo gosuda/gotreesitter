@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestGrammarReceiptNightlyWorkflow(t *testing.T) {
+func TestGrammarReceiptWeeklyWorkflow(t *testing.T) {
 	data, err := os.ReadFile("../../.github/workflows/grammar-receipts.yml")
 	if err != nil {
 		t.Fatal(err)
@@ -36,11 +36,11 @@ func TestGrammarReceiptNightlyWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(wf.On.Schedule) != 1 {
-		t.Fatalf("want one nightly schedule, got %v", wf.On.Schedule)
+		t.Fatalf("want one weekly schedule, got %v", wf.On.Schedule)
 	}
 	cron := strings.Fields(wf.On.Schedule[0].Cron)
-	if len(cron) != 5 || cron[2] != "*" || cron[3] != "*" || cron[4] != "*" {
-		t.Fatalf("receipt schedule must run every day: %v", cron)
+	if len(cron) != 5 || cron[2] != "*" || cron[3] != "*" || cron[4] != "1" {
+		t.Fatalf("receipt schedule must run every Monday: %v", cron)
 	}
 	if len(wf.On.Release.Types) != 1 || wf.On.Release.Types[0] != "published" {
 		t.Fatalf("receipt workflow must run for every published release: %v", wf.On.Release.Types)

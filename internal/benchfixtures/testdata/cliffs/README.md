@@ -24,7 +24,7 @@ The copied files have no changes. Their license texts are in `licenses/` (see "L
 ## Top-20 coverage fixtures
 
 The cliff report also covers every top-20 language, the first 20 names in `grammars/update_tier1_top50.txt`.
-The nightly run on main then gives each engine pull request a "before" column.
+The weekly run on main then gives each engine pull request a "before" column.
 `cliffCoverageFixtures` in `cgo_harness/cliff_fixture_table_test.go` lists each fixture with its grammar, source, size, and digest.
 
 A language with no committed whole file uses two other inputs, which add no files here:
@@ -97,4 +97,4 @@ Read each field by its kind:
 - Unmeasured rows: a route that took the forest fast path (`forest_fast_path` true) reports `frontier.measured` false, with zero tokens and nodes. A declined compact row has no frontier of its own and repeats the legacy tree.
 - Full parses only: the report has no reuse counters, so an incremental pull request still needs the counter ledger (`internal/benchfixtures/counter_ledger.json`).
 - Error-recovery rows: check `has_error` before you read a row's counters as a clean parse. Some rows have an `ERROR` on C itself, such as `cpp_sample` (the `FMT_TRY` and `FMT_CATCH` macros) and `html`. Others have an `ERROR` on a Go route while C is clean, such as `kotlin_sample`. Those rows measure error recovery, not clean parsing.
-- The latest nightly: run `gh run list --workflow cliff-report.yml --event schedule --branch main --limit 1`, then `gh run download <id> -p 'cliff-report-nightly-*'`. A nightly turns red when a report is missing or the fixture table check fails, so do not read a red run as a baseline. Add `--status success` to the list command to skip red runs.
+- The latest weekly: run `gh run list --workflow cliff-report.yml --event schedule --branch main --limit 1`, then `gh run download <id> -p 'cliff-report-weekly-*'`. A weekly turns red when a report is missing or the fixture table check fails, so do not read a red run as a baseline. Add `--status success` to the list command to skip red runs.
