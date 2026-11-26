@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: c100d9f2099b412b6af707fbc150cb97eea31582
+          ref: 1e18f70ff08db15f12c2c0bb1ec3d3830be3b763
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: go.mod
@@ -27,8 +27,8 @@ jobs:
         run: |
           set -euo pipefail
           export GOENV=off GOCACHEPROG='' GOMAXPROCS=2 GOFLAGS=-p=1
-          test "$(git rev-parse HEAD)" = c100d9f2099b412b6af707fbc150cb97eea31582
-          test "$(git rev-parse HEAD^{tree})" = f62a99ba312ddd641ba7140d73e4860ada6ab5d4
+          test "$(git rev-parse HEAD)" = 1e18f70ff08db15f12c2c0bb1ec3d3830be3b763
+          test "$(git rev-parse HEAD^{tree})" = fff6cd711438b7cc306577e214fd310a98f8257b
           git rev-parse HEAD HEAD^{tree}
           gofmt -d cmd/citestplan/forkhistory_test.go cmd/citestplan/perfdiagnostics_test.go
           test -z "$(gofmt -l cmd/citestplan/forkhistory_test.go cmd/citestplan/perfdiagnostics_test.go)"

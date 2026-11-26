@@ -35,7 +35,7 @@ func TestBenchmarkCompletionAndAdvisoryDiagnostics(t *testing.T) {
 			}
 			for name, body := range map[string]string{
 				"time": "#!/bin/bash\nset -euo pipefail\ntest \"$1\" = -v\nshift\nexec \"$@\"\n",
-				"git":  `#!/bin/bash
+				"git": `#!/bin/bash
 set -euo pipefail
 case "$1" in
   fetch)
