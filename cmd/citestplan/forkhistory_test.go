@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -51,24 +52,30 @@ func TestForkAPIBaseline(t *testing.T) {
 	if !strings.Contains(script, released) || !strings.Contains(script, "v0.57.0") {
 		t.Fatal("fork fallback must identify the documented, immutable v0.57.0 release")
 	}
-	origin := historyRepository(t, "fork")
 	remote := historyRepository(t, "released upstream API")
 	baseline := historyGit(t, remote, "rev-parse", "HEAD")
 	for _, ownTag := range []bool{false, true} {
 		t.Run(map[bool]string{false: "fork without tags", true: "fork release wins"}[ownTag], func(t *testing.T) {
+			origin := historyRepository(t, "fork")
 			dir := historyRepository(t, "candidate")
 			historyGit(t, dir, "remote", "add", "origin", origin)
 			url := remote
 			if ownTag {
-				historyGit(t, dir, "tag", "v0.80.0")
+				historyGit(t, origin, "tag", "v0.80.0")
 				url = filepath.Join(t.TempDir(), "unavailable-upstream")
 			}
 			historyGit(t, dir, "config", "url."+url+".insteadOf", upstream)
+			if tags := historyGit(t, dir, "tag", "--list"); tags != "" {
+				t.Fatalf("candidate already has release tags: %s", tags)
+			}
 			fixture := strings.ReplaceAll(script, released, baseline)
 			if output, err := runHistoryStep(dir, fixture); err != nil {
 				t.Fatalf("release preparation: %v\n%s", err, output)
 			}
 			if ownTag {
+				if got, want := historyGit(t, dir, "rev-parse", "v0.80.0^{commit}"), historyGit(t, origin, "rev-parse", "HEAD"); got != want {
+					t.Fatalf("fork baseline = %s, want remote release %s", got, want)
+				}
 				if tags := historyGit(t, dir, "tag", "--list"); tags != "v0.80.0" {
 					t.Fatalf("upstream fallback changed fork release tags: %s", tags)
 				}
@@ -77,6 +84,7 @@ func TestForkAPIBaseline(t *testing.T) {
 			}
 		})
 	}
+	origin := historyRepository(t, "fork without releases")
 	dir := historyRepository(t, "failed baseline fetch")
 	historyGit(t, dir, "remote", "add", "origin", origin)
 	historyGit(t, dir, "config", "url."+filepath.Join(t.TempDir(), "missing")+".insteadOf", upstream)
@@ -87,33 +95,52 @@ func TestForkAPIBaseline(t *testing.T) {
 
 func TestForkHistoricalReceiptObjects(t *testing.T) {
 	script := historyStep(t, "compact-route-lifecycle-history", "Fetch retired historical receipt commits")
-	if strings.Contains(script, "--depth") {
-		t.Fatal("historical proof preparation must preserve full ancestry")
-	}
 	revisions := regexp.MustCompile(`[0-9a-f]{40}`).FindAllString(script, -1)
 	if len(revisions) != 6 {
 		t.Fatalf("historical fetch lists %d revisions, want the six unreachable originals", len(revisions))
 	}
-	remote := historyRepository(t, "retired receipt")
-	receipt := historyGit(t, remote, "rev-parse", "HEAD")
+	remote := historyRepository(t, "shared receipt root")
+	root := historyGit(t, remote, "rev-parse", "HEAD")
 	fixture := script
-	for _, revision := range revisions {
-		fixture = strings.ReplaceAll(fixture, revision, receipt)
+	type receipt struct {
+		commit string
+		parent string
+	}
+	receipts := make([]receipt, 0, len(revisions))
+	for index, revision := range revisions {
+		historyGit(t, remote, "checkout", "-q", "-B", fmt.Sprintf("receipt-%d", index), root)
+		historyGit(t, remote, "commit", "--allow-empty", "-qm", fmt.Sprintf("receipt parent %d", index))
+		parent := historyGit(t, remote, "rev-parse", "HEAD")
+		historyGit(t, remote, "commit", "--allow-empty", "-qm", fmt.Sprintf("receipt %d", index))
+		commit := historyGit(t, remote, "rev-parse", "HEAD")
+		receipts = append(receipts, receipt{commit: commit, parent: parent})
+		fixture = strings.ReplaceAll(fixture, revision, commit)
 	}
 	const upstream = "https://github.com/odvcencio/gotreesitter.git"
-	dir := historyRepository(t, "fork without receipt")
-	historyGit(t, dir, "config", "url."+remote+".insteadOf", upstream)
-	if output, err := runHistoryStep(dir, fixture); err != nil {
-		t.Fatalf("missing historical object fetch: %v\n%s", err, output)
-	}
-	historyGit(t, dir, "cat-file", "-e", receipt+"^{commit}")
-	if got := historyGit(t, dir, "rev-parse", "--is-shallow-repository"); got != "false" {
-		t.Fatalf("historical preparation made the repository shallow: %s", got)
-	}
-	historyGit(t, dir, "config", "--unset", "url."+remote+".insteadOf")
-	historyGit(t, dir, "config", "url."+filepath.Join(t.TempDir(), "missing")+".insteadOf", upstream)
-	if output, err := runHistoryStep(dir, fixture); err != nil {
-		t.Fatalf("available receipt should not need the network: %v\n%s", err, output)
+	for _, preload := range []bool{false, true} {
+		t.Run(map[bool]string{false: "all missing", true: "one available"}[preload], func(t *testing.T) {
+			dir := historyRepository(t, "fork without receipts")
+			if preload {
+				historyGit(t, dir, "fetch", "--no-tags", remote, receipts[0].commit)
+			}
+			historyGit(t, dir, "config", "url."+remote+".insteadOf", upstream)
+			if output, err := runHistoryStep(dir, fixture); err != nil {
+				t.Fatalf("missing historical object fetch: %v\n%s", err, output)
+			}
+			for _, receipt := range receipts {
+				historyGit(t, dir, "cat-file", "-e", receipt.commit+"^{commit}")
+				historyGit(t, dir, "cat-file", "-e", receipt.parent+"^{commit}")
+				historyGit(t, dir, "merge-base", "--is-ancestor", receipt.parent, receipt.commit)
+			}
+			if got := historyGit(t, dir, "rev-parse", "--is-shallow-repository"); got != "false" {
+				t.Fatalf("historical preparation made the repository shallow: %s", got)
+			}
+			historyGit(t, dir, "config", "--unset", "url."+remote+".insteadOf")
+			historyGit(t, dir, "config", "url."+filepath.Join(t.TempDir(), "missing")+".insteadOf", upstream)
+			if output, err := runHistoryStep(dir, fixture); err != nil {
+				t.Fatalf("available receipts should not need the network: %v\n%s", err, output)
+			}
+		})
 	}
 	missing := historyRepository(t, "missing receipt and remote")
 	historyGit(t, missing, "config", "url."+filepath.Join(t.TempDir(), "missing")+".insteadOf", upstream)

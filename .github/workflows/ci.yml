@@ -3066,8 +3066,11 @@ jobs:
 
           # Keep edit attribution separate from the unchanged timing inputs.
           # Capture the runner CPU because hosted depot-ubuntu-24.04 spans hardware.
-          bash scripts/run_go_edit_attribution.sh "${BASE_TREE}" \
-            "${OUT_DIR}/edit-attribution" "${BASE_RSS_BIN}" "${HEAD_RSS_BIN}"
+          if ! bash scripts/run_go_edit_attribution.sh "${BASE_TREE}" \
+            "${OUT_DIR}/edit-attribution" "${BASE_RSS_BIN}" "${HEAD_RSS_BIN}"; then
+            echo "::warning::edit attribution is unavailable; the completed benchmark comparison remains valid"
+            printf '%s\n' '- edit attribution: unavailable (advisory)' >> "${GITHUB_STEP_SUMMARY}"
+          fi
 
       - name: Perf Definitive Outcome Summary
         if: always()
