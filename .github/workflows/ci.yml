@@ -2866,7 +2866,6 @@ jobs:
             --run '^TestParityHighlight$|^TestParityHighlightAllGrammars$|^TestParityYAMLCorpus$|^TestParityYAMLCorpusStructural$|^TestParityYAMLCorpusSummary$'
 
   perf-regression:
-    continue-on-error: true
     needs: exhaustive_parity_scope
     if: needs.exhaustive_parity_scope.outputs.run_code_ci == 'true' && github.event_name == 'workflow_dispatch'
     runs-on: depot-ubuntu-24.04-4
@@ -2885,7 +2884,7 @@ jobs:
           cache: ${{ runner.environment != 'self-hosted' }}
           go-version-file: go.mod
 
-      - name: Benchmark Base vs Head (advisory)
+      - name: Benchmark correctness and advisory thresholds
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PERF_LEGACY_BASE_SHA: 7a29f591d7fcc54b3d0639b3e38a1bacd8fcb386
