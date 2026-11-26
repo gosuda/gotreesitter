@@ -15,7 +15,8 @@ func TestBenchmarkCompletionAndAdvisoryDiagnostics(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		campaign    int
-		rss         int
+		baseRSS     int
+		headRSS     int
 		threshold   int
 		attribution int
 		wantExit    int
@@ -24,7 +25,8 @@ func TestBenchmarkCompletionAndAdvisoryDiagnostics(t *testing.T) {
 		{name: "all complete"},
 		{name: "diagnostic unavailable", attribution: 42, wantWarning: "::warning::edit attribution is unavailable"},
 		{name: "benchmark execution fails", campaign: 43, wantExit: 43},
-		{name: "RSS execution fails", rss: 44, wantExit: 44},
+		{name: "base RSS execution fails", baseRSS: 44, wantExit: 44},
+		{name: "head RSS execution fails", headRSS: 45, wantExit: 45},
 		{name: "threshold regression", threshold: 1, wantWarning: "::warning::performance thresholds exceeded"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,7 +66,14 @@ esac
 				"go": `#!/bin/bash
 set -euo pipefail
 if [ "$1" = test ] && [ "$2" = -c ] && [ "$3" = -o ]; then
-  printf '#!/bin/bash\nexit "$RSS_EXIT"\n' > "$4"
+  if [ "$PWD" = "$RUNNER_TEMP" ]; then
+    label=head
+    status=$HEAD_RSS_EXIT
+  else
+    label=base
+    status=$BASE_RSS_EXIT
+  fi
+  printf '#!/bin/bash\nprintf "rss %s\\n" >> "$CALLS"\nexit %s\n' "$label" "$status" > "$4"
   chmod +x "$4"
 elif [ "$1" = run ] && [ "$2" = ./cmd/benchgate ]; then
   exit "$THRESHOLD_EXIT"
@@ -83,7 +92,8 @@ fi
 				"PATH="+bin+":"+os.Getenv("PATH"),
 				"BASE_SHA=base", "PERF_BENCH_CONTRACT_BASE_SHA=contract", "PERF_LEGACY_BASE_SHA=legacy",
 				"RUNNER_TEMP="+dir, "GITHUB_STEP_SUMMARY="+filepath.Join(dir, "summary"), "CALLS="+filepath.Join(dir, "calls"),
-				"CAMPAIGN_EXIT="+strconv.Itoa(tc.campaign), "RSS_EXIT="+strconv.Itoa(tc.rss),
+				"CAMPAIGN_EXIT="+strconv.Itoa(tc.campaign),
+				"BASE_RSS_EXIT="+strconv.Itoa(tc.baseRSS), "HEAD_RSS_EXIT="+strconv.Itoa(tc.headRSS),
 				"THRESHOLD_EXIT="+strconv.Itoa(tc.threshold), "ATTRIBUTION_EXIT="+strconv.Itoa(tc.attribution))
 			output, err := command.CombinedOutput()
 			exitCode := 0
@@ -103,6 +113,11 @@ fi
 			calls, err := os.ReadFile(filepath.Join(dir, "calls"))
 			if err != nil {
 				t.Fatal(err)
+			}
+			for label, want := range map[string]bool{"base": tc.campaign == 0, "head": tc.campaign == 0 && tc.baseRSS == 0} {
+				if ran := strings.Contains(string(calls), "rss "+label+"\n"); ran != want {
+					t.Fatalf("mandatory %s RSS invocation mismatch: %s", label, calls)
+				}
 			}
 			if ran := strings.Contains(string(calls), "attribution\n"); ran != (tc.wantExit == 0) {
 				t.Fatalf("diagnostic must follow completed benchmark work: %s", calls)
