@@ -66,7 +66,7 @@ esac
 				"go": `#!/bin/bash
 set -euo pipefail
 if [ "$1" = test ] && [ "$2" = -c ] && [ "$3" = -o ]; then
-  if [ "$PWD" = "$RUNNER_TEMP" ]; then
+  if [ "$PWD" -ef "$RUNNER_TEMP" ]; then
     label=head
     status=$HEAD_RSS_EXIT
   else
